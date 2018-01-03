@@ -1,3 +1,26 @@
+-- Place quickfort blueprints.
+--[====[
+
+quickerfort
+===========
+QuickFort-like blueprint placement. Place hundreds of bedrooms with ease!
+
+Blueprints are read from the :file:`blueprints/` directory in the DF root dir,
+and should be formatted in QuickFort-style CSV.
+
+While placing a blueprint, pressing :kbd:`h` flips the blueprint horizontally,
+pressing :kbd:`v` flips the blueprint vertically, and pressing :kbd:`r` rotates
+the blueprint by 90 degrees. If the blueprint has multiple z-levels or is
+larger than the screen, you can press :kbd:`l` to lock the blueprint in place
+and then look around with the cursor keys to check the extent.
+
+]====]
+
+--[[
+TODO:
+- `b`uildings
+- `q`ueries
+--]]
 gui = require 'gui'
 widgets = require 'gui.widgets'
 guidm = require 'gui.dwarfmode'
@@ -13,13 +36,42 @@ local TYPES = {
     x = df.tile_dig_designation.No,
 }
 
+-- Cribbed from http://www.lua.org/pil/20.4.html
+function parseCsvLine(s, delim)
+    s = s .. ','
+    local t = {}
+    local fieldstart = 1
+    repeat
+        if string.find(s, '^"', fieldstart) then
+            local a, c
+            local i = fieldstart
+            repeat
+                a, i, c = string.find(s, '"("?)', i+1)
+            until c ~= '"'  -- quote not followed by quote?
+            if not i then qerror('Invalid CSV: unmatched "') end
+            local f = string.sub(s, fieldstart+1, i-1)
+            table.insert(t, (string.gsub(f, '""', '"')))
+            fieldstart = string.find(s, delim, i) + 1
+        else  -- unquoted; find next comma
+            local nexti = string.find(s, delim, fieldstart)
+            table.insert(t, string.sub(s, fieldstart, nexti-1))
+            fieldstart = nexti + 1
+        end
+    until fieldstart > string.len(s)
+    return t
+end
+
+function trim(s)
+    return string.match(s, "^%s*(.-)%s*$")
+end
+
 function parseBlueprint(content)
     local layers = {[0] = {}, min = 0, max = 0}
     local layer = 0
-    for line in string.gmatch(content.."\n", "([^\n]*)\n") do
-        local tile_line = utils.split_string(line, "[,;]")
+    for line in string.gmatch(content.."\n", "(.-)\n") do
+        local tile_line = parseCsvLine(line, "[,;]")
         for i=1,#tile_line do
-            tile_line[i] = string.match(tile_line[i], "^%s*(.-)%s*$")
+            tile_line[i] = trim(tile_line[i])
         end
         if string.match(tile_line[1], "^#") then
             if tile_line[1] == '#>' then
@@ -50,13 +102,16 @@ function reversed(tbl)
     return reversed
 end
 
--- transposes the elements of a list-of-lists
+-- transposes the elements of a list-of-lists, filling in blanks with the empty
+-- string
 function transpose(tbl)
-    -- TODO: this is broken sometimes and idk why
     local transposed = {}
     for y, line in ipairs(tbl) do
         for x, char in ipairs(line) do
-            if not transposed[x] then transposed[x] = {} end
+            if not transposed[x] then
+                transposed[x] = {}
+                for i=1,y do transposed[x][i] = '' end
+            end
             transposed[x][y] = char
         end
     end
@@ -149,6 +204,7 @@ end
 
 function BlueprintList:reread()
     local root = dfhack.getDFPath() .. "/blueprints"
+    dfhack.filesystem.mkdir(root)
     local bps = {}
     for _,v in ipairs(dfhack.filesystem.listdir(root)) do
         local path = root .. "/" .. v
@@ -189,6 +245,8 @@ function Place:init(stuff)
     self.saved_mode = df.global.ui.main.mode
 end
 function Place:onShow()
+    -- TODO: this sometimes results in the cursor having x=-30000, not sure
+    -- why.
     df.global.ui.main.mode = df.ui_sidebar_mode.LookAround
 end
 function Place:onDestroy()
@@ -300,7 +358,6 @@ end
 function Place:onInput(keys)
     if keys.LEAVESCREEN then
         self:dismiss()
-        
     --[[
     elseif keys.CUSTOM_D then
         local cursor = df.global.cursor

@@ -242,7 +242,6 @@ function BlueprintList:pick(label)
         for i, v in ipairs(self.blueprints) do
             if v.text == label then
                 self.subviews.list:setSelected(i)
-                self:select(i, v)
             end
         end
     end

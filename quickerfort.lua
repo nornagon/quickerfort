@@ -237,6 +237,17 @@ function BlueprintList:refresh()
     self.subviews.list:setChoices(self.blueprints)
 end
 
+function BlueprintList:pick(label)
+    if label then
+        for i, v in ipairs(self.blueprints) do
+            if v.text == label then
+                self.subviews.list:setSelected(i)
+                self:select(i, v)
+            end
+        end
+    end
+end
+
 function BlueprintList:select(index, choice) -- called when moving the cursor through the list
     if choice then
         self.subviews.preview.data = choice.contents
@@ -456,7 +467,9 @@ function Copy:onInput(keys)
             self.start_pos = nil
             self.cursor = nil
             self:dismiss()
-            BlueprintList():show()
+            bpl = BlueprintList()
+            bpl:show()
+            bpl:pick("test-dig.csv")
         else
             self.start_pos = cursor
         end

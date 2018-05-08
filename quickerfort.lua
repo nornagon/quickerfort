@@ -208,8 +208,16 @@ end
 function BlueprintList:reread()
     local root = dfhack.getDFPath() .. "/blueprints"
     dfhack.filesystem.mkdir(root)
+    local files = {}
+    for i,f in ipairs(dfhack.filesystem.listdir(root)) do
+        local path = root .. "/" .. f
+        if dfhack.filesystem.isfile(path) then
+            table.insert(files, f)
+        end
+    end
+    table.sort(files)
     local bps = {}
-    for _,v in ipairs(dfhack.filesystem.listdir(root)) do
+    for _,v in ipairs(files) do
         local path = root .. "/" .. v
         if dfhack.filesystem.isfile(path) then
             local f = io.open(path, 'r')

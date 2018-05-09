@@ -428,33 +428,58 @@ Copy = defclass(Copy, guidm.MenuOverlay)
 function Copy:init()
     self.saved_mode = df.global.ui.main.mode
     self.start_pos = nil
-    self.cursor = nil
+    self:addviews{ widgets.Label{ view_id = 'title',
+                                  frame = { t=1, l=1 },
+                                  text = "Create new blueprint"
+                                },
+                   widgets.EditField{ view_id = 'name_input',
+                                      frame = { t=3, l=3, r=1 },
+                                      text_pen = COLOR_GREY,
+                                      text = "quickerfort",
+                                      key = "CUSTOM_N",
+                                      active = false
+                                    },
+                   widgets.Label{ view_id = 'size',
+                                  frame = { b=2, l=1 },
+                                  text = " "
+                                },
+    }
 end
 
 function Copy:onDestroy()
     df.global.ui.main.mode = self.saved_mode
 end
 
-function Copy:onRenderBody(p)
-    p:clear()
-
-    p:seek(1, 1):string("Creating blueprint"):newline():newline(1)
-    local cursor = guidm.getCursorPos()
-    if self.start_pos and cursor then
-        local s, e = normalizeCoords(self.start_pos, cursor)
-        local dim = xyz2pos(e.x - s.x + 1,
-                            e.y - s.y + 1,
-                            e.z - s.z + 1)
-        p:string(string.format("%sx%sx%s", dim.x, dim.y, dim.z)):newline(1)
-    end
+function Copy:enable_input(enable)
+    self.subviews.name_input.active=enable
 end
 
 function Copy:onInput(keys)
     local cursor = guidm.getCursorPos()
     if keys.LEAVESCREEN then
-        self:dismiss()
-    elseif self:simulateCursorMovement(keys) then
-        self.cursor = cursor
+        if self.subviews.name_input.active then
+            self:enable_input(false)
+        else
+            self:dismiss()
+        end
+    elseif keys.SELECT then
+        if self.subviews.name_input.active then
+            self:enable_input(false)
+            return
+        end
+    elseif self.subviews.name_input.active then
+        self.super.onInput(self,keys)
+        return
+    end
+
+    if self:simulateCursorMovement(keys) then
+        if self.start_pos and cursor then
+            local s, e = normalizeCoords(self.start_pos, cursor)
+            local dim = xyz2pos(e.x - s.x + 1,
+                                e.y - s.y + 1,
+                                e.z - s.z + 1)
+            self.subviews.size:setText(string.format("%sx%sx%s", dim.x, dim.y, dim.z))
+        end
     elseif keys.SELECT then
         if self.start_pos then
             local s, e = normalizeCoords(self.start_pos, cursor)
@@ -462,16 +487,17 @@ function Copy:onInput(keys)
                           xyz2pos(e.x + 1,
                                   e.y + 1,
                                   e.z + 1),
-                          "blueprints/test")
+                          "blueprints/" .. self.subviews.name_input.text)
             self.start_pos = nil
-            self.cursor = nil
             self:dismiss()
             bpl = BlueprintList()
             bpl:show()
-            bpl:pick("test-dig.csv")
+            bpl:pick(self.subviews.name_input.text .. "-dig.csv")
         else
             self.start_pos = cursor
         end
+    elseif keys.CUSTOM_N then
+        self:enable_input(true)
     end
 end
 

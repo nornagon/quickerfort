@@ -25,6 +25,8 @@ gui = require 'gui'
 widgets = require 'gui.widgets'
 guidm = require 'gui.dwarfmode'
 utils = require 'utils'
+dumper = require 'dumper'
+blueprint = require 'plugins.blueprint'
 
 local TYPES = {
     d = df.tile_dig_designation.Default,
@@ -150,7 +152,7 @@ BlueprintList.ATTRS = {
     frame_style = gui.GREY_LINE_FRAME,
     frame_title = 'Blueprints',
     frame_width = 64,
-    frame_height = 20,
+    frame_height = 22,
     frame_inset = 1,
 }
 
@@ -167,26 +169,27 @@ function BlueprintList:init()
         },
         Preview{
             view_id = 'preview',
-            frame = {t = 0},
+            frame = {t = 0, h = self.frame_height - 2},
         },
         widgets.Label{
             view_id = 'controls',
             frame = {b = 0, l = 0},
             text = {
                 {key = 'SELECT', text = ': Select, '},
+                {key = 'CUSTOM_N', text = ': New blueprint, '},
                 {key = 'LEAVESCREEN', text = ': Back', on_activate = self:callback('dismiss')},
             },
         },
         widgets.Label{
             view_id = 'scroll_up',
-            frame = {t = 0, l = self.frame_width - 1},
+            frame = {t = 0, l = self.frame_width/2 - 2},
             text = {{pen = COLOR_LIGHTCYAN, text=function()
                 return self.subviews.list.page_top ~= 1 and string.char(24) or ''
             end}},
         },
         widgets.Label{
             view_id = 'scroll_down',
-            frame = {t = 1, l = self.frame_width - 1},
+            frame = {t = 1, l = self.frame_width/2 - 2},
             text = {{pen = COLOR_LIGHTCYAN, text=function()
                 local list = self.subviews.list
                 return list.page_top + list.page_size < #list:getChoices() and string.char(25) or ''
@@ -234,6 +237,16 @@ function BlueprintList:refresh()
     self.subviews.list:setChoices(self.blueprints)
 end
 
+function BlueprintList:pick(label)
+    if label then
+        for i, v in ipairs(self.blueprints) do
+            if v.text == label then
+                self.subviews.list:setSelected(i)
+            end
+        end
+    end
+end
+
 function BlueprintList:select(index, choice) -- called when moving the cursor through the list
     if choice then
         self.subviews.preview.data = choice.contents
@@ -244,6 +257,15 @@ function BlueprintList:submit(_, choice)
     self:dismiss()
     Place{blueprint=choice}:show()
 end
+
+function BlueprintList:onInput(keys)
+    if keys.CUSTOM_N then
+        self:dismiss()
+        Copy{}:show()
+    end
+    BlueprintList.super.onInput(self, keys)
+end
+
 
 -- Map overlay for placing the blueprint in the world
 Place = defclass(Place, guidm.MenuOverlay)
@@ -399,6 +421,93 @@ function Place:onInput(keys)
             self:propagateMoveKeys(keys)
         end
     end
+end
+
+-- Map overlay for copying a part of the world into a new blueprint
+Copy = defclass(Copy, guidm.MenuOverlay)
+function Copy:init()
+    self.saved_mode = df.global.ui.main.mode
+    self.start_pos = nil
+    self:addviews{ widgets.Label{ view_id = 'title',
+                                  frame = { t=1, l=1 },
+                                  text = "Create new blueprint"
+                                },
+                   widgets.EditField{ view_id = 'name_input',
+                                      frame = { t=3, l=3, r=1 },
+                                      text_pen = COLOR_GREY,
+                                      text = "quickerfort",
+                                      key = "CUSTOM_N",
+                                      active = false
+                                    },
+                   widgets.Label{ view_id = 'size',
+                                  frame = { b=2, l=1 },
+                                  text = " "
+                                },
+    }
+end
+
+function Copy:onDestroy()
+    df.global.ui.main.mode = self.saved_mode
+end
+
+function Copy:enable_input(enable)
+    self.subviews.name_input.active=enable
+end
+
+function Copy:onInput(keys)
+    local cursor = guidm.getCursorPos()
+    if keys.LEAVESCREEN then
+        if self.subviews.name_input.active then
+            self:enable_input(false)
+        else
+            self:dismiss()
+        end
+    elseif keys.SELECT then
+        if self.subviews.name_input.active then
+            self:enable_input(false)
+            return
+        end
+    elseif self.subviews.name_input.active then
+        self.super.onInput(self,keys)
+        return
+    end
+
+    if self:simulateCursorMovement(keys) then
+        if self.start_pos and cursor then
+            local s, e = normalizeCoords(self.start_pos, cursor)
+            local dim = xyz2pos(e.x - s.x + 1,
+                                e.y - s.y + 1,
+                                e.z - s.z + 1)
+            self.subviews.size:setText(string.format("%sx%sx%s", dim.x, dim.y, dim.z))
+        end
+    elseif keys.SELECT then
+        if self.start_pos then
+            local s, e = normalizeCoords(self.start_pos, cursor)
+            blueprint.dig(s,
+                          xyz2pos(e.x + 1,
+                                  e.y + 1,
+                                  e.z + 1),
+                          "blueprints/" .. self.subviews.name_input.text)
+            self.start_pos = nil
+            self:dismiss()
+            bpl = BlueprintList()
+            bpl:show()
+            bpl:pick(self.subviews.name_input.text .. "-dig.csv")
+        else
+            self.start_pos = cursor
+        end
+    elseif keys.CUSTOM_N then
+        self:enable_input(true)
+    end
+end
+
+function normalizeCoords(p1, p2)
+    return xyz2pos(math.min(p1.x, p2.x),
+                   math.min(p1.y, p2.y),
+                   math.min(p1.z, p2.z)),
+           xyz2pos(math.max(p1.x, p2.x),
+                   math.max(p1.y, p2.y),
+                   math.max(p1.z, p2.z))
 end
 
 BlueprintList():show()
